@@ -27,7 +27,7 @@ public:
 
     // 多点校正をやり直さず、スロープは据え置きで現在の生値を0gとして
     // オフセットだけを更新する(いわゆる簡易TARE)
-    void quickTare(
+    bool quickTare(
         double raw);
 
     bool getPoint(
