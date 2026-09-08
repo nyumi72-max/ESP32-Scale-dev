@@ -46,7 +46,7 @@ bool Hx711Calibration::isTared() const
     return _tared;
 }
 
-void Hx711Calibration::quickTare(
+bool Hx711Calibration::quickTare(
     double raw)
 {
     // weight = slope*raw + offset なので、
