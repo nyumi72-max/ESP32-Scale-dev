@@ -20,10 +20,10 @@ Hx711Calibration::Hx711Calibration(
 void Hx711Calibration::clear()
 {
     _count = 0;
-
     _slope = 1.0;
     _offset = 0.0;
     _r2 = 0.0;
+    _tared = false;
 }
 
 int Hx711Calibration::pointCount() const
