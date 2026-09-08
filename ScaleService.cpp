@@ -90,6 +90,11 @@ void ScaleService::printWeight()
 
 void ScaleService::doTare()
 {
+    if (!_cal.isCalibrated())
+        {
+            notify("Calibration required before TARE. Use CAL BEGIN / CAL ADD / CAL DONE first.");
+            return;
+        }
     if (!waitReady(250))
     {
         notify("HX711 not ready");
@@ -101,7 +106,12 @@ void ScaleService::doTare()
 
     double raw = _scale.read_average(20);
 
-    _cal.quickTare(raw);
+    if (!_cal.quickTare(raw))
+    {
+        notify("Tare failed.");
+        return;
+    }
+
     _cal.save();
 
     notify("Tare complete. Raw at 0g: " + String(raw, 0));
