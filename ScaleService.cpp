@@ -252,3 +252,18 @@ bool ScaleService::handleCommand(
 
     return false;
 }
+
+bool ScaleService::getWeight(double &weight)
+{
+    if (!_scale.is_ready())
+        return false;
+
+    if (!_cal.isReady())
+        return false;
+
+    long raw = _scale.read_average(5);
+
+    weight = _cal.convert((double)raw);
+
+    return true;
+}
