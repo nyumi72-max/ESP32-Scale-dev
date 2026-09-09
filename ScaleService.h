@@ -35,6 +35,8 @@ public:
     // 認識できないコマンドならfalseを返す
     bool handleCommand(const String& cmd);
 
+    bool getWeight(double &weight);
+
 private:
 
     void notify(const String& msg);
