@@ -291,6 +291,48 @@ void ScaleController::enterPowerSave(
     _sleep.sleep(sleepSeconds);
 }
 
+bool ScaleController::sendWeightAndWaitAck(uint32_t timeoutMs)
+{
+    double weight;
+
+    if (!_ble.isConnected())
+    {
+        sendMessage("BLE not connected");
+        return false;
+    }
+
+    if (!_scale.getWeight(weight))
+    {
+        sendMessage("Weight measurement failed");
+        return false;
+    }
+
+    _ble.clearAck();
+
+    String message = "WEIGHT:";
+    message += String(weight, 2);
+
+    _ble.println(message);
+
+    uint32_t start = millis();
+
+    while (millis() - start < timeoutMs)
+    {
+        _ble.update();
+
+        if (_ble.isAckReceived())
+        {
+            sendMessage("ACK received");
+            return true;
+        }
+
+        delay(10);
+    }
+
+    sendMessage("ACK timeout");
+    return false;
+}
+
 void ScaleController::sendWeightAndSleep(
     uint64_t sleepSeconds)
 {
