@@ -14,6 +14,8 @@ public:
     bool isValid() const;
 
     uint32_t secondsUntilNextSchedule() const;
+    
+    void prepareForSleep(uint64_t sleepSeconds);
 
 private:
     uint32_t _unixTime = 0;

@@ -18,6 +18,9 @@ public:
     void save();
     void load();
 
+    void setScheduleEnabled(bool enabled);
+    bool isScheduleEnabled() const;
+
 private:
     Preferences _preferences;
 
@@ -26,5 +29,7 @@ private:
 
     static constexpr const char *NVS_NAMESPACE = "scale";
 };
+
+    bool _scheduleEnabled = true;
 
 #endif

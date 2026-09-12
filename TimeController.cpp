@@ -1,11 +1,30 @@
 #include "TimeController.h"
 
+RTC_DATA_ATTR uint32_t rtcBaseUnixTime = 0;
+RTC_DATA_ATTR uint32_t rtcSleepSeconds = 0;
+RTC_DATA_ATTR bool rtcTimeValid = false;
+
 void TimeController::begin()
 {
-    _unixTime = 0;
-    _valid = false;
-    _baseUnixTime = 0;
-    _baseMillis = 0;
+    _valid = rtcTimeValid;
+
+    if (_valid)
+    {
+        _unixTime =
+            rtcBaseUnixTime +
+            rtcSleepSeconds;
+
+        _baseUnixTime = _unixTime;
+    }
+    else
+    {
+        _unixTime = 0;
+        _baseUnixTime = 0;
+    }
+
+    _baseMillis = millis();
+
+    rtcSleepSeconds = 0;
 }
 
 bool TimeController::setUnixTime(uint32_t unixTime)
@@ -15,9 +34,12 @@ bool TimeController::setUnixTime(uint32_t unixTime)
 
     _baseUnixTime = unixTime;
     _baseMillis = millis();
-
     _unixTime = unixTime;
     _valid = true;
+
+    rtcBaseUnixTime = unixTime;
+    rtcSleepSeconds = 0;
+    rtcTimeValid = true;
 
     return true;
 }
@@ -75,4 +97,14 @@ uint32_t TimeController::secondsUntilNextSchedule() const
 
     return (86400UL - secondsOfDay) +
            targets[0];
+}
+
+void TimeController::prepareForSleep(uint64_t sleepSeconds)
+{
+    if (!_valid)
+        return;
+
+    rtcBaseUnixTime = getUnixTime();
+    rtcSleepSeconds = sleepSeconds;
+    rtcTimeValid = true;
 }

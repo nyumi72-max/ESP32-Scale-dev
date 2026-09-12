@@ -27,6 +27,8 @@ public:
 
     void stop();
 
+    bool waitForConnection(uint32_t timeoutMs);
+
 private:
     CommandCallback _commandCallback = nullptr;
     uint32_t _ackSequence = 0;

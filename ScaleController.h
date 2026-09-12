@@ -47,6 +47,9 @@ void sleepUntilNextSchedule();
 
 bool wasTimerWakeup() const;
 
+void setScheduleEnabled(bool enabled);
+bool isScheduleEnabled() const;
+
 private:
     ScaleService _scale;
     CommandRouter _router;
@@ -60,6 +63,11 @@ private:
     String _serialBuffer;
 
     void processSerial();
+
+    void handleWakeup();
+
+    void processScheduledMeasurement();
+
 };
 
 #endif

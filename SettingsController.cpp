@@ -27,25 +27,37 @@ uint32_t SettingsController::getSequence() const
 
 void SettingsController::save()
 {
-    if (!_preferences.begin(NVS_NAMESPACE, false))
-        return;
+    _preferences.putUInt(
+        "device_id",
+        _deviceId);
 
-    _preferences.putUInt("device_id", _deviceId);
-    _preferences.putUInt("sequence", _sequence);
+    _preferences.putUInt(
+        "sequence",
+        _sequence);
 
-    _preferences.end();
+    _preferences.putBool(
+        "schedule",
+        _scheduleEnabled);
 }
 
 void SettingsController::load()
 {
-    if (!_preferences.begin(NVS_NAMESPACE, true))
-        return;
-
     _deviceId =
         _preferences.getUInt("device_id", 0);
 
     _sequence =
         _preferences.getUInt("sequence", 0);
 
-    _preferences.end();
+    _scheduleEnabled =
+        _preferences.getBool("schedule", true);
+}
+
+void SettingsController::setScheduleEnabled(bool enabled)
+{
+    _scheduleEnabled = enabled;
+}
+
+bool SettingsController::isScheduleEnabled() const
+{
+    return _scheduleEnabled;
 }

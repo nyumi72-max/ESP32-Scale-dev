@@ -21,6 +21,7 @@ static BLECharacteristic *pTxCharacteristic = nullptr;
 static BLECharacteristic *pRxCharacteristic = nullptr;
 
 static bool bleDeviceConnected = false;
+static bool bleStopping = false;
 static String bleRxBuffer;
 
 static BLEController *gController = nullptr;
@@ -43,7 +44,10 @@ public:
         Serial.println(
             "BLE client disconnected. Restart advertising.");
 
-        BLEDevice::startAdvertising();
+        if (!bleStopping)
+        {
+           BLEDevice::startAdvertising();
+        }
     }
 };
 
@@ -82,6 +86,9 @@ public:
 
 void BLEController::begin()
 {
+
+    bleStopping = false;
+
     gController = this;
 
     BLEDevice::init(BLE_DEVICE_NAME);
@@ -245,14 +252,36 @@ bool BLEController::isAckReceived(
            _ackSequence == sequence;
 }
 
+bool BLEController::waitForConnection(uint32_t timeoutMs)
+{
+    uint32_t start = millis();
+
+    while (!bleDeviceConnected)
+    {
+        update();
+
+        if (millis() - start >= timeoutMs)
+            return false;
+
+        delay(10);
+    }
+
+    return true;
+}
+
 void BLEController::stop()
 {
+    bleStopping = true;
+
     BLEDevice::stopAdvertising();
 
     if (pServer != nullptr)
     {
-        pServer->disconnect(
-            pServer->getConnId());
+        if (bleDeviceConnected)
+        {
+            pServer->disconnect(
+                pServer->getConnId());
+        }
     }
 
     bleDeviceConnected = false;

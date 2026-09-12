@@ -196,12 +196,37 @@ static bool routeScheduleCommand(const String &command)
     cmd.trim();
     cmd.toUpperCase();
 
-    if (cmd != "SCHEDULE")
-        return false;
+    if (cmd == "SCHEDULE")
+    {
+        gController->sleepUntilNextSchedule();
+        return true;
+    }
 
-    gController->sleepUntilNextSchedule();
+    if (cmd == "SCHEDULE ON")
+    {
+        gController->setScheduleEnabled(true);
+        gController->sendMessage("SCHEDULE: ON");
+        return true;
+    }
 
-    return true;
+    if (cmd == "SCHEDULE OFF")
+    {
+        gController->setScheduleEnabled(false);
+        gController->sendMessage("SCHEDULE: OFF");
+        return true;
+    }
+
+    if (cmd == "SCHEDULE?")
+    {
+        gController->sendMessage(
+            gController->isScheduleEnabled()
+                ? "SCHEDULE: ON"
+                : "SCHEDULE: OFF");
+
+        return true;
+    }
+
+    return false;
 }
 
 static bool routeDeviceCommand(const String &command)
@@ -326,7 +351,10 @@ void ScaleController::begin()
         HX711_DOUT_PIN,
         HX711_SCK_PIN);
 
+    _scale.begin(6, 7);
     _scale.setPrintInterval(500);
+
+    handleWakeup();
 
     Serial.println("System ready.");
 }
@@ -417,20 +445,18 @@ void ScaleController::processSerial()
     }
 }
 
-void ScaleController::enterPowerSave(
-    uint64_t sleepSeconds)
+void ScaleController::enterPowerSave(uint64_t sleepSeconds)
 {
     _sleep.prepare();
 
-    _ble.println(
-        "Entering power save mode");
+    _time.prepareForSleep(sleepSeconds);
+
+    _ble.println("Entering power save mode");
 
     _ble.stop();
-
     delay(50);
 
     _power.disable4V5();
-
     delay(50);
 
     _sleep.sleep(sleepSeconds);
@@ -589,4 +615,66 @@ void ScaleController::sleepUntilNextSchedule()
 bool ScaleController::wasTimerWakeup() const
 {
     return _sleep.wasTimerWakeup();
+}
+
+void ScaleController::handleWakeup()
+{
+    if (!_sleep.wasTimerWakeup())
+        return;
+
+    sendMessage("Timer wakeup");
+
+    if (!_time.isValid())
+    {
+        sendMessage("TIME: INVALID");
+        return;
+    }
+
+    sendMessage(
+        "Current time: " +
+        String(_time.getUnixTime()));
+
+    processScheduledMeasurement();
+}
+
+void ScaleController::processScheduledMeasurement()
+{
+    if (!_settings.isScheduleEnabled())
+    {
+        sendMessage("Scheduled measurement disabled");
+        return;
+    }
+
+    sendMessage("Waiting for BLE connection");
+
+    if (!_ble.waitForConnection(10000))
+    {
+        sendMessage("BLE connection timeout");
+        sleepUntilNextSchedule();
+        return;
+    }
+
+    sendMessage("BLE connected");
+
+    if (!sendWeightAndWaitAck(5000))
+    {
+        sendMessage("Measurement transmission failed");
+        sleepUntilNextSchedule();
+        return;
+    }
+
+    sendMessage("Measurement transmission complete");
+
+    sleepUntilNextSchedule();
+}
+
+void ScaleController::setScheduleEnabled(bool enabled)
+{
+    _settings.setScheduleEnabled(enabled);
+    _settings.save();
+}
+
+bool ScaleController::isScheduleEnabled() const
+{
+    return _settings.isScheduleEnabled();
 }
