@@ -54,6 +54,8 @@ bool isScheduleEnabled() const;
 void setMeasurementEnabled(bool enabled);
 bool isMeasurementEnabled() const;
 
+bool isBleConnected() const;
+
 private:
     ScaleService _scale;
     CommandRouter _router;

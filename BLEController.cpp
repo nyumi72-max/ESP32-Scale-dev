@@ -213,11 +213,21 @@ void BLEController::receiveCommand(
         String value = cmd.substring(4);
         value.trim();
 
+        if (value.length() == 0)
+            return;
+
+        char *endPtr = nullptr;
         uint32_t sequence =
             strtoul(
                 value.c_str(),
-                nullptr,
+                &endPtr,
                 10);
+
+        if (endPtr == value.c_str() ||
+            *endPtr != '\0')
+        {
+            return;
+        }
 
         _ackSequence = sequence;
         _ackReceived = true;

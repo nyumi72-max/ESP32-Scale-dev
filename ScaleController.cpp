@@ -187,6 +187,47 @@ static bool routeTimeCommand(const String &command)
     return true;
 }
 
+static bool routeTimeSyncCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+
+    if (!cmd.startsWith("TIMESYNC"))
+        return false;
+
+    String value = cmd.substring(8);
+    value.trim();
+
+    if (value.length() == 0)
+    {
+        gController->sendMessage(
+            "TIMESYNC: INVALID");
+        return true;
+    }
+
+    uint32_t unixTime =
+        strtoul(
+            value.c_str(),
+            nullptr,
+            10);
+
+    if (!gController->setUnixTime(unixTime))
+    {
+        gController->sendMessage(
+            "TIMESYNC: INVALID");
+        return true;
+    }
+
+    gController->sendMessage(
+        "TIMESYNC: OK " +
+        String(gController->getUnixTime()));
+
+    return true;
+}
+
 static bool routeScheduleCommand(const String &command)
 {
     if (gController == nullptr)
@@ -263,6 +304,49 @@ static bool routeMeasurementCommand(const String &command)
     }
 
     return false;
+}
+
+static bool routeStatusCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+    cmd.toUpperCase();
+
+    if (cmd != "STATUS")
+        return false;
+
+    gController->sendMessage(
+        "DEVICE ID: " +
+        String(gController->getDeviceId()));
+
+    gController->sendMessage(
+        "SEQUENCE: " +
+        String(gController->getSequence()));
+
+    gController->sendMessage(
+        gController->isTimeValid()
+            ? "TIME: " + String(gController->getUnixTime())
+            : "TIME: INVALID");
+
+    gController->sendMessage(
+        gController->isScheduleEnabled()
+            ? "SCHEDULE: ON"
+            : "SCHEDULE: OFF");
+
+    gController->sendMessage(
+        gController->isMeasurementEnabled()
+            ? "MEASURE: ON"
+            : "MEASURE: OFF");
+
+    gController->sendMessage(
+        gController->isBleConnected()
+            ? "BLE: CONNECTED"
+            : "BLE: DISCONNECTED");
+
+    return true;
 }
 
 static bool routeDeviceCommand(const String &command)
@@ -370,6 +454,9 @@ void ScaleController::begin()
         routeTimeCommand);
 
     _router.addHandler(
+        routeTimeSyncCommand);
+
+    _router.addHandler(
         routeScheduleCommand);
 
     _router.addHandler(
@@ -377,6 +464,9 @@ void ScaleController::begin()
 
     _router.addHandler(
         routeMeasurementCommand);
+
+    _router.addHandler(
+        routeStatusCommand);
 
     _ble.setCommandCallback(
         [](const String &command) -> bool
@@ -442,6 +532,7 @@ bool ScaleController::handleCommand(
     _ble.println("  SCHEDULE");
     _ble.println("  DEVICE [id]");
     _ble.println("  SCHEDULE ON/OFF/?");
+    _ble.println("  STATUS");
 
     return false;
 }
@@ -511,27 +602,27 @@ bool ScaleController::sendWeightAndWaitAck(
 
     if (!_ble.isConnected())
     {
-        sendMessage("BLE not connected");
+        sendMessage("ERROR:BLE_NOT_CONNECTED");
         return false;
     }
 
     if (!_scale.getWeight(weight))
     {
-        sendMessage("Weight measurement failed");
+        sendMessage("ERROR:MEASURE_FAILED");
         return false;
     }
 
-    uint32_t sequence =
-        _settings.getSequence() + 1;
+    // Sequence is generated only once.
+    // All retries use the same sequence number.
+    uint32_t sequence = _settings.getSequence();
+    sequence++;
 
     _settings.setSequence(sequence);
     _settings.save();
 
-    uint32_t deviceId =
-        _settings.getDeviceId();
+    uint32_t deviceId = _settings.getDeviceId();
 
     uint32_t unixTime = 0;
-
     if (_time.isValid())
         unixTime = _time.getUnixTime();
 
@@ -544,7 +635,11 @@ bool ScaleController::sendWeightAndWaitAck(
     message += String(weight, 2);
     message += ",TIME=";
     message += String(unixTime);
+    message += ",TYPE=WEIGHT";
+    message += ",STATUS=OK";
 
+    // retryCount means additional attempts.
+    // retryCount = 2 -> maximum 3 transmissions.
     for (uint8_t attempt = 0;
          attempt <= retryCount;
          attempt++)
@@ -571,12 +666,12 @@ bool ScaleController::sendWeightAndWaitAck(
         if (attempt < retryCount)
         {
             sendMessage(
-                "ACK timeout. Retry " +
+                "ACK timeout, retry " +
                 String(attempt + 1));
         }
     }
 
-    sendMessage("ACK timeout");
+    sendMessage("ERROR:ACK_TIMEOUT");
     return false;
 }
 
@@ -675,10 +770,43 @@ void ScaleController::handleWakeup()
 
     sendMessage("Timer wakeup");
 
+    // Time is not valid.
+    // Wait for Gateway and receive TIMESYNC.
     if (!_time.isValid())
     {
         sendMessage("TIME: INVALID");
-        return;
+        sendMessage("Waiting for time synchronization");
+
+        if (!_ble.waitForConnection(10000))
+        {
+            sendMessage("Time sync connection timeout");
+            return;
+        }
+
+        sendMessage("Gateway connected");
+
+        // Give the Gateway time to send TIMESYNC.
+        uint32_t start = millis();
+
+        while (millis() - start < 5000)
+        {
+            _ble.update();
+
+            if (_time.isValid())
+                break;
+
+            delay(10);
+        }
+
+        if (!_time.isValid())
+        {
+            sendMessage("ERROR:TIME_SYNC_TIMEOUT");
+            return;
+        }
+
+        sendMessage(
+            "Time synchronized: " +
+            String(_time.getUnixTime()));
     }
 
     sendMessage(
@@ -693,14 +821,12 @@ void ScaleController::processScheduledMeasurement()
     if (!_settings.isScheduleEnabled())
     {
         sendMessage("Scheduled measurement disabled");
-        sleepUntilNextSchedule();
         return;
     }
 
     if (!_settings.isMeasurementEnabled())
     {
         sendMessage("Measurement disabled");
-        sleepUntilNextSchedule();
         return;
     }
 
@@ -747,4 +873,9 @@ void ScaleController::setMeasurementEnabled(bool enabled)
 bool ScaleController::isMeasurementEnabled() const
 {
     return _settings.isMeasurementEnabled();
+}
+
+bool ScaleController::isBleConnected() const
+{
+    return _ble.isConnected();
 }
