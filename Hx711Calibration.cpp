@@ -53,6 +53,7 @@ bool Hx711Calibration::quickTare(
     // 現在の生値rawでweight=0になるようoffsetだけを調整する
     _offset = -(_slope * raw);
     _tared = true;
+    return true;
 }
 
 bool Hx711Calibration::begin()
