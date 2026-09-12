@@ -31,5 +31,6 @@ private:
     CommandCallback _commandCallback = nullptr;
     uint32_t _ackSequence = 0;
     bool _ackReceived = false;
+};
 
 #endif
