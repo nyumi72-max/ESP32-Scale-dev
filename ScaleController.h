@@ -56,6 +56,11 @@ bool isMeasurementEnabled() const;
 
 bool isBleConnected() const;
 
+bool gatewaySession(uint32_t connectionTimeoutMs = 10000,
+                    uint32_t timeSyncTimeoutMs = 5000,
+                    uint32_t ackTimeoutMs = 5000,
+                    uint8_t retryCount = 2);
+
 private:
     ScaleService _scale;
     CommandRouter _router;
@@ -75,6 +80,10 @@ private:
     void processScheduledMeasurement();
 
     bool _measurementEnabled = true;
+
+    bool syncTimeFromGateway(
+    uint32_t connectionTimeoutMs = 10000,
+    uint32_t syncTimeoutMs = 5000);
 
 };
 

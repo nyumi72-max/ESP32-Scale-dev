@@ -483,9 +483,26 @@ void ScaleController::begin()
 
     _scale.setPrintInterval(500);
 
-    handleWakeup();
+handleWakeup();
 
-    Serial.println("System ready.");
+if (!_sleep.wasTimerWakeup() &&
+    !_time.isValid())
+{
+    sendMessage("Initial time synchronization");
+
+    if (syncTimeFromGateway())
+    {
+        sendMessage("Initial time synchronization complete");
+        sleepUntilNextSchedule();
+    }
+    else
+    {
+        sendMessage(
+            "Initial time synchronization failed");
+    }
+}
+
+Serial.println("System ready.");
 }
 
 void ScaleController::update()
@@ -675,6 +692,93 @@ bool ScaleController::sendWeightAndWaitAck(
     return false;
 }
 
+bool ScaleController::syncTimeFromGateway(
+    uint32_t connectionTimeoutMs,
+    uint32_t syncTimeoutMs)
+{
+    if (_time.isValid())
+        return true;
+
+    sendMessage("TIME: INVALID");
+    sendMessage("Waiting for Gateway time");
+
+    if (!_ble.isConnected())
+    {
+        if (!_ble.waitForConnection(connectionTimeoutMs))
+        {
+            sendMessage("ERROR:GATEWAY_CONNECT_TIMEOUT");
+            return false;
+        }
+    }
+
+    sendMessage("Gateway connected");
+
+    uint32_t start = millis();
+
+    while (millis() - start < syncTimeoutMs)
+    {
+        _ble.update();
+
+        if (_time.isValid())
+        {
+            sendMessage(
+                "Time synchronized: " +
+                String(_time.getUnixTime()));
+
+            return true;
+        }
+
+        delay(10);
+    }
+
+    sendMessage("ERROR:TIME_SYNC_TIMEOUT");
+    return false;
+}
+
+bool ScaleController::gatewaySession(
+    uint32_t connectionTimeoutMs,
+    uint32_t timeSyncTimeoutMs,
+    uint32_t ackTimeoutMs,
+    uint8_t retryCount)
+{
+    sendMessage("Gateway session start");
+
+    // Gateway connection
+    if (!_ble.isConnected())
+    {
+        sendMessage("Waiting for Gateway");
+
+        if (!    _ble.waitForConnection(connectionTimeoutMs))
+        {
+            sendMessage("ERROR:GATEWAY_CONNECT_TIMEOUT");
+            return false;
+        }
+    }
+
+    sendMessage("Gateway connected");
+
+    // Time synchronization
+    if (!syncTimeFromGateway(
+        connectionTimeoutMs,
+        timeSyncTimeoutMs))
+{
+    return false;
+}
+
+    // Measurement and DATA/ACK
+    if (!sendWeightAndWaitAck(
+            ackTimeoutMs,
+            retryCount))
+    {
+        sendMessage("ERROR:DATA_TRANSMISSION");
+        return false;
+    }
+
+    sendMessage("Gateway session complete");
+
+    return true;
+}
+
 void ScaleController::sendWeightAndSleep(uint64_t sleepSeconds)
 {
     if (sendWeightAndWaitAck())
@@ -830,20 +934,13 @@ void ScaleController::processScheduledMeasurement()
         return;
     }
 
-    sendMessage("Waiting for BLE connection");
-
-    if (!_ble.waitForConnection(10000))
+    if (!gatewaySession(
+            10000,   // Gateway connection timeout
+            5000,    // Time sync timeout
+            5000,    // ACK timeout
+            2))      // 2 retries = maximum 3 transmissions
     {
-        sendMessage("BLE connection timeout");
-        sleepUntilNextSchedule();
-        return;
-    }
-
-    sendMessage("BLE connected");
-
-    if (!sendWeightAndWaitAck(5000))
-    {
-        sendMessage("Measurement transmission failed");
+        sendMessage("Gateway session failed");
         sleepUntilNextSchedule();
         return;
     }
