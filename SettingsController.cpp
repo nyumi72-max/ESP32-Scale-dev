@@ -2,6 +2,10 @@
 
 void SettingsController::begin()
 {
+    _preferences.begin(
+        NVS_NAMESPACE,
+        false);
+
     load();
 }
 
@@ -38,6 +42,10 @@ void SettingsController::save()
     _preferences.putBool(
         "schedule",
         _scheduleEnabled);
+
+    _preferences.putBool(
+        "measure",
+        _measurementEnabled);
 }
 
 void SettingsController::load()
@@ -50,6 +58,9 @@ void SettingsController::load()
 
     _scheduleEnabled =
         _preferences.getBool("schedule", true);
+
+    _measurementEnabled =
+        _preferences.getBool("measure", true);
 }
 
 void SettingsController::setScheduleEnabled(bool enabled)
@@ -60,4 +71,14 @@ void SettingsController::setScheduleEnabled(bool enabled)
 bool SettingsController::isScheduleEnabled() const
 {
     return _scheduleEnabled;
+}
+
+void SettingsController::setMeasurementEnabled(bool enabled)
+{
+    _measurementEnabled = enabled;
+}
+
+bool SettingsController::isMeasurementEnabled() const
+{
+    return _measurementEnabled;
 }

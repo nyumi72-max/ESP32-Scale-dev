@@ -17,7 +17,7 @@ class CommandRouter
 {
 public:
 
-    static const int MAX_HANDLERS = 8;
+    static constexpr uint8_t MAX_HANDLERS = 12;
 
     CommandRouter();
 

@@ -221,6 +221,8 @@ void BLEController::receiveCommand(
 
         _ackSequence = sequence;
         _ackReceived = true;
+
+        return;
     }
 
     if (_commandCallback != nullptr)

@@ -21,12 +21,17 @@ public:
     void setScheduleEnabled(bool enabled);
     bool isScheduleEnabled() const;
 
+    void setMeasurementEnabled(bool enabled);
+    bool isMeasurementEnabled() const;
+
 private:
     Preferences _preferences;
 
     uint32_t _deviceId = 0;
     uint32_t _sequence = 0;
+
     bool _scheduleEnabled = true;
+    bool _measurementEnabled = true;
 
     static constexpr const char *NVS_NAMESPACE = "scale";
 };

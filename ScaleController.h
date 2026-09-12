@@ -28,7 +28,8 @@ public:
     void enterPowerSave(uint64_t sleepSeconds);
 
     bool sendWeightAndWaitAck(
-    uint32_t timeoutMs = 5000);
+    uint32_t timeoutMs = 5000,
+    uint8_t retryCount = 2);
 
     void sendWeightAndSleep(uint64_t sleepSeconds);
 
@@ -50,6 +51,9 @@ bool wasTimerWakeup() const;
 void setScheduleEnabled(bool enabled);
 bool isScheduleEnabled() const;
 
+void setMeasurementEnabled(bool enabled);
+bool isMeasurementEnabled() const;
+
 private:
     ScaleService _scale;
     CommandRouter _router;
@@ -67,6 +71,8 @@ private:
     void handleWakeup();
 
     void processScheduledMeasurement();
+
+    bool _measurementEnabled = true;
 
 };
 

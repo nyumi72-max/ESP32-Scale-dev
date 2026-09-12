@@ -229,6 +229,42 @@ static bool routeScheduleCommand(const String &command)
     return false;
 }
 
+static bool routeMeasurementCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+    cmd.toUpperCase();
+
+    if (cmd == "MEASURE ON")
+    {
+        gController->setMeasurementEnabled(true);
+        gController->sendMessage("MEASURE: ON");
+        return true;
+    }
+
+    if (cmd == "MEASURE OFF")
+    {
+        gController->setMeasurementEnabled(false);
+        gController->sendMessage("MEASURE: OFF");
+        return true;
+    }
+
+    if (cmd == "MEASURE?")
+    {
+        gController->sendMessage(
+            gController->isMeasurementEnabled()
+                ? "MEASURE: ON"
+                : "MEASURE: OFF");
+
+        return true;
+    }
+
+    return false;
+}
+
 static bool routeDeviceCommand(const String &command)
 {
     if (gController == nullptr)
@@ -329,6 +365,7 @@ void ScaleController::begin()
 
     _router.addHandler(
         routeSequenceCommand);
+
     _router.addHandler(
         routeTimeCommand);
 
@@ -337,6 +374,9 @@ void ScaleController::begin()
 
     _router.addHandler(
         routeScaleCommand);
+
+    _router.addHandler(
+        routeMeasurementCommand);
 
     _ble.setCommandCallback(
         [](const String &command) -> bool
@@ -351,7 +391,6 @@ void ScaleController::begin()
         HX711_DOUT_PIN,
         HX711_SCK_PIN);
 
-    _scale.begin(6, 7);
     _scale.setPrintInterval(500);
 
     handleWakeup();
@@ -401,6 +440,8 @@ bool ScaleController::handleCommand(
     _ble.println("  SEQ [number]");
     _ble.println("  TIME [unix]");
     _ble.println("  SCHEDULE");
+    _ble.println("  DEVICE [id]");
+    _ble.println("  SCHEDULE ON/OFF/?");
 
     return false;
 }
@@ -463,7 +504,8 @@ void ScaleController::enterPowerSave(uint64_t sleepSeconds)
 }
 
 bool ScaleController::sendWeightAndWaitAck(
-    uint32_t timeoutMs)
+    uint32_t timeoutMs,
+    uint8_t retryCount)
 {
     double weight;
 
@@ -480,9 +522,7 @@ bool ScaleController::sendWeightAndWaitAck(
     }
 
     uint32_t sequence =
-        _settings.getSequence();
-
-    sequence++;
+        _settings.getSequence() + 1;
 
     _settings.setSequence(sequence);
     _settings.save();
@@ -493,10 +533,7 @@ bool ScaleController::sendWeightAndWaitAck(
     uint32_t unixTime = 0;
 
     if (_time.isValid())
-    {
-        unixTime =
-            _time.getUnixTime();
-    }
+        unixTime = _time.getUnixTime();
 
     String message = "DATA,";
     message += "ID=";
@@ -508,32 +545,42 @@ bool ScaleController::sendWeightAndWaitAck(
     message += ",TIME=";
     message += String(unixTime);
 
-    _ble.clearAck();
-
-    _ble.println(message);
-
-    uint32_t start = millis();
-
-    while (millis() - start < timeoutMs)
+    for (uint8_t attempt = 0;
+         attempt <= retryCount;
+         attempt++)
     {
-        _ble.update();
+        _ble.clearAck();
 
-        if (_ble.isAckReceived(sequence))
+        _ble.println(message);
+
+        uint32_t start = millis();
+
+        while (millis() - start < timeoutMs)
         {
-            sendMessage("ACK received");
-            return true;
+            _ble.update();
+
+            if (_ble.isAckReceived(sequence))
+            {
+                sendMessage("ACK received");
+                return true;
+            }
+
+            delay(10);
         }
 
-        delay(10);
+        if (attempt < retryCount)
+        {
+            sendMessage(
+                "ACK timeout. Retry " +
+                String(attempt + 1));
+        }
     }
 
     sendMessage("ACK timeout");
-
     return false;
 }
 
-void ScaleController::sendWeightAndSleep(
-    uint64_t sleepSeconds)
+void ScaleController::sendWeightAndSleep(uint64_t sleepSeconds)
 {
     if (sendWeightAndWaitAck())
     {
@@ -542,12 +589,10 @@ void ScaleController::sendWeightAndSleep(
         delay(100);
 
         enterPowerSave(sleepSeconds);
+        return;
     }
-    else
-    {
-        sendMessage(
-            "Transmission failed. Stay awake.");
-    }
+
+    sendMessage("Transmission failed. Stay awake.");
 }
 
 void ScaleController::setDeviceId(uint32_t id)
@@ -589,6 +634,12 @@ bool ScaleController::isTimeValid() const
 
 void ScaleController::sleepUntilNextSchedule()
 {
+    if (!_settings.isScheduleEnabled())
+    {
+        sendMessage("SCHEDULE: OFF");
+        return;
+    }
+
     if (!_time.isValid())
     {
         sendMessage("TIME: INVALID");
@@ -642,6 +693,14 @@ void ScaleController::processScheduledMeasurement()
     if (!_settings.isScheduleEnabled())
     {
         sendMessage("Scheduled measurement disabled");
+        sleepUntilNextSchedule();
+        return;
+    }
+
+    if (!_settings.isMeasurementEnabled())
+    {
+        sendMessage("Measurement disabled");
+        sleepUntilNextSchedule();
         return;
     }
 
@@ -677,4 +736,15 @@ void ScaleController::setScheduleEnabled(bool enabled)
 bool ScaleController::isScheduleEnabled() const
 {
     return _settings.isScheduleEnabled();
+}
+
+void ScaleController::setMeasurementEnabled(bool enabled)
+{
+    _settings.setMeasurementEnabled(enabled);
+    _settings.save();
+}
+
+bool ScaleController::isMeasurementEnabled() const
+{
+    return _settings.isMeasurementEnabled();
 }
