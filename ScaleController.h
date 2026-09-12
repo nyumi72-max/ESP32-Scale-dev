@@ -32,6 +32,21 @@ public:
 
     void sendWeightAndSleep(uint64_t sleepSeconds);
 
+    void setDeviceId(uint32_t id);
+uint32_t getDeviceId() const;
+
+    void setSequence(uint32_t sequence);
+uint32_t getSequence() const;
+
+bool setUnixTime(uint32_t unixTime);
+uint32_t getUnixTime() const;
+
+bool isTimeValid() const;
+
+void sleepUntilNextSchedule();
+
+bool wasTimerWakeup() const;
+
 private:
     ScaleService _scale;
     CommandRouter _router;

@@ -23,13 +23,13 @@ public:
     bool isOtaRunning() const;
 
     void clearAck();
-    bool isAckReceived() const;
+    bool isAckReceived(uint32_t sequence) const;
 
     void stop();
 
 private:
     CommandCallback _commandCallback = nullptr;
+    uint32_t _ackSequence = 0;
     bool _ackReceived = false;
-};
 
 #endif

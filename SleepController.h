@@ -23,6 +23,8 @@ public:
 
     bool isSleeping() const;
 
+    bool wasTimerWakeup() const;
+
 private:
     State _state = AWAKE;
 };

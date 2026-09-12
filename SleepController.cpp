@@ -35,3 +35,9 @@ bool SleepController::isSleeping() const
 {
     return _state == SLEEPING;
 }
+
+bool SleepController::wasTimerWakeup() const
+{
+    return esp_sleep_get_wakeup_cause() ==
+           ESP_SLEEP_WAKEUP_TIMER;
+}

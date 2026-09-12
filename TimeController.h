@@ -13,8 +13,12 @@ public:
 
     bool isValid() const;
 
+    uint32_t secondsUntilNextSchedule() const;
+
 private:
     uint32_t _unixTime = 0;
+    uint32_t _baseUnixTime = 0;
+    uint32_t _baseMillis = 0;
     bool _valid = false;
 };
 

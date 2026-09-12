@@ -198,14 +198,27 @@ void BLEController::setCommandCallback(
 void BLEController::receiveCommand(
     const String &command)
 {
-    if (command.equalsIgnoreCase("ACK"))
+    String cmd = command;
+    cmd.trim();
+
+    if (cmd.startsWith("ACK:"))
     {
+        String value = cmd.substring(4);
+        value.trim();
+
+        uint32_t sequence =
+            strtoul(
+                value.c_str(),
+                nullptr,
+                10);
+
+        _ackSequence = sequence;
         _ackReceived = true;
     }
 
     if (_commandCallback != nullptr)
     {
-        _commandCallback(command);
+        _commandCallback(cmd);
     }
 }
 
@@ -222,11 +235,14 @@ bool BLEController::isOtaRunning() const
 void BLEController::clearAck()
 {
     _ackReceived = false;
+    _ackSequence = 0;
 }
 
-bool BLEController::isAckReceived() const
+bool BLEController::isAckReceived(
+    uint32_t sequence) const
 {
-    return _ackReceived;
+    return _ackReceived &&
+           _ackSequence == sequence;
 }
 
 void BLEController::stop()

@@ -107,6 +107,137 @@ static bool routeSleepCommand(
     return true;
 }
 
+static bool routeSequenceCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+
+    if (!cmd.startsWith("SEQ"))
+        return false;
+
+    String value = cmd.substring(3);
+    value.trim();
+
+    if (value.length() == 0)
+    {
+        gController->sendMessage(
+            "SEQUENCE: " +
+            String(gController->getSequence()));
+
+        return true;
+    }
+
+    uint32_t sequence =
+        strtoul(value.c_str(), nullptr, 10);
+
+    gController->setSequence(sequence);
+
+    gController->sendMessage(
+        "SEQUENCE set: " +
+        String(sequence));
+
+    return true;
+}
+
+static bool routeTimeCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+
+    if (!cmd.startsWith("TIME"))
+        return false;
+
+    String value = cmd.substring(4);
+    value.trim();
+
+    if (value.length() == 0)
+    {
+        if (!gController->isTimeValid())
+        {
+            gController->sendMessage("TIME: INVALID");
+            return true;
+        }
+
+        gController->sendMessage(
+            "TIME: " +
+            String(gController->getUnixTime()));
+
+        return true;
+    }
+
+    uint32_t unixTime =
+        strtoul(value.c_str(), nullptr, 10);
+
+    if (!gController->setUnixTime(unixTime))
+    {
+        gController->sendMessage("TIME: INVALID");
+        return true;
+    }
+
+    gController->sendMessage(
+        "TIME set: " +
+        String(gController->getUnixTime()));
+
+    return true;
+}
+
+static bool routeScheduleCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+    cmd.toUpperCase();
+
+    if (cmd != "SCHEDULE")
+        return false;
+
+    gController->sleepUntilNextSchedule();
+
+    return true;
+}
+
+static bool routeDeviceCommand(const String &command)
+{
+    if (gController == nullptr)
+        return false;
+
+    String cmd = command;
+    cmd.trim();
+
+    if (!cmd.startsWith("DEVICE"))
+        return false;
+
+    String value = cmd.substring(6);
+    value.trim();
+
+    if (value.length() == 0)
+    {
+        gController->sendMessage(
+            "DEVICE ID: " +
+            String(gController->getDeviceId()));
+
+        return true;
+    }
+
+    uint32_t id =
+        strtoul(value.c_str(), nullptr, 10);
+
+    gController->setDeviceId(id);
+
+    gController->sendMessage(
+        "DEVICE ID set: " + String(id));
+
+    return true;
+}
+
 static bool routeScaleCommand(
     const String &command)
 {
@@ -169,6 +300,17 @@ void ScaleController::begin()
         routeSleepCommand);
 
     _router.addHandler(
+        routeDeviceCommand);
+
+    _router.addHandler(
+        routeSequenceCommand);
+    _router.addHandler(
+        routeTimeCommand);
+
+    _router.addHandler(
+        routeScheduleCommand);
+
+    _router.addHandler(
         routeScaleCommand);
 
     _ble.setCommandCallback(
@@ -226,8 +368,11 @@ bool ScaleController::handleCommand(
     _ble.println("  CAL ADD <grams>");
     _ble.println("  CAL DONE");
     _ble.println("  CAL LIST");
-    _ble.println(
-        "  BLE OTA - use the BLEOTA WebApp");
+    _ble.println("  SLEEP [seconds]");
+    _ble.println("  BLE OTA - use the BLEOTA WebApp");
+    _ble.println("  SEQ [number]");
+    _ble.println("  TIME [unix]");
+    _ble.println("  SCHEDULE");
 
     return false;
 }
@@ -291,7 +436,8 @@ void ScaleController::enterPowerSave(
     _sleep.sleep(sleepSeconds);
 }
 
-bool ScaleController::sendWeightAndWaitAck(uint32_t timeoutMs)
+bool ScaleController::sendWeightAndWaitAck(
+    uint32_t timeoutMs)
 {
     double weight;
 
@@ -307,10 +453,36 @@ bool ScaleController::sendWeightAndWaitAck(uint32_t timeoutMs)
         return false;
     }
 
-    _ble.clearAck();
+    uint32_t sequence =
+        _settings.getSequence();
 
-    String message = "WEIGHT:";
+    sequence++;
+
+    _settings.setSequence(sequence);
+    _settings.save();
+
+    uint32_t deviceId =
+        _settings.getDeviceId();
+
+    uint32_t unixTime = 0;
+
+    if (_time.isValid())
+    {
+        unixTime =
+            _time.getUnixTime();
+    }
+
+    String message = "DATA,";
+    message += "ID=";
+    message += String(deviceId);
+    message += ",SEQ=";
+    message += String(sequence);
+    message += ",WEIGHT=";
     message += String(weight, 2);
+    message += ",TIME=";
+    message += String(unixTime);
+
+    _ble.clearAck();
 
     _ble.println(message);
 
@@ -320,7 +492,7 @@ bool ScaleController::sendWeightAndWaitAck(uint32_t timeoutMs)
     {
         _ble.update();
 
-        if (_ble.isAckReceived())
+        if (_ble.isAckReceived(sequence))
         {
             sendMessage("ACK received");
             return true;
@@ -330,6 +502,7 @@ bool ScaleController::sendWeightAndWaitAck(uint32_t timeoutMs)
     }
 
     sendMessage("ACK timeout");
+
     return false;
 }
 
@@ -349,4 +522,71 @@ void ScaleController::sendWeightAndSleep(
         sendMessage(
             "Transmission failed. Stay awake.");
     }
+}
+
+void ScaleController::setDeviceId(uint32_t id)
+{
+    _settings.setDeviceId(id);
+    _settings.save();
+}
+
+uint32_t ScaleController::getDeviceId() const
+{
+    return _settings.getDeviceId();
+}
+
+void ScaleController::setSequence(uint32_t sequence)
+{
+    _settings.setSequence(sequence);
+    _settings.save();
+}
+
+uint32_t ScaleController::getSequence() const
+{
+    return _settings.getSequence();
+}
+
+bool ScaleController::setUnixTime(uint32_t unixTime)
+{
+    return _time.setUnixTime(unixTime);
+}
+
+uint32_t ScaleController::getUnixTime() const
+{
+    return _time.getUnixTime();
+}
+
+bool ScaleController::isTimeValid() const
+{
+    return _time.isValid();
+}
+
+void ScaleController::sleepUntilNextSchedule()
+{
+    if (!_time.isValid())
+    {
+        sendMessage("TIME: INVALID");
+        return;
+    }
+
+    uint32_t seconds =
+        _time.secondsUntilNextSchedule();
+
+    if (seconds == 0)
+    {
+        sendMessage("Schedule calculation failed");
+        return;
+    }
+
+    sendMessage(
+        "Next wake in " +
+        String(seconds) +
+        " seconds");
+
+    enterPowerSave(seconds);
+}
+
+bool ScaleController::wasTimerWakeup() const
+{
+    return _sleep.wasTimerWakeup();
 }
