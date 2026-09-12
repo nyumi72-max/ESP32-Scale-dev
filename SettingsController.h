@@ -26,10 +26,9 @@ private:
 
     uint32_t _deviceId = 0;
     uint32_t _sequence = 0;
+    bool _scheduleEnabled = true;
 
     static constexpr const char *NVS_NAMESPACE = "scale";
 };
-
-    bool _scheduleEnabled = true;
 
 #endif
