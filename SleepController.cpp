@@ -2,9 +2,13 @@
 
 #include <esp_sleep.h>
 
-void SleepController::begin()
+void SettingsController::begin()
 {
-    _state = AWAKE;
+    _preferences.begin(
+        NVS_NAMESPACE,
+        false);
+
+    load();
 }
 
 void SleepController::prepare()
